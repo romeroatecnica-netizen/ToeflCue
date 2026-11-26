@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://toeflcue.bastelar.com/sitemap.xml
+Host: https://toeflcue.bastelar.com

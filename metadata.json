@@ -1,0 +1,6 @@
+{
+  "name": "ToeflCue — Bite-Sized TOEFL Trainer & Interactive Drills",
+  "description": "Free interactive Duolingo-style TOEFL iBT trainer for Reading, Listening, Speaking, and Writing with instant hints, distractor explanations, and local progress tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
