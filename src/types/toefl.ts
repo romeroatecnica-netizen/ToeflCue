@@ -77,3 +77,16 @@ export interface LangMeta {
   ogLocale: string;
   dir: 'ltr' | 'rtl';
 }
+
+export type ChallengeMode = Exclude<DrillMode, 'mistakes'>;
+
+export interface ChallengeConfig {
+  seed: string;
+  mode: ChallengeMode;
+  roundNumber: number;
+  challengerName?: string;
+  targetCorrect?: number;
+  targetTotal?: number;
+  targetXp?: number;
+}
+

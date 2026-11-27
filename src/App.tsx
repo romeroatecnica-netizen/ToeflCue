@@ -14,12 +14,17 @@ import {
 } from './config/seo';
 import { getTranslations } from './i18n';
 import type {
+  ChallengeConfig,
   DrillMode,
   StudyNote,
   SupportedLang,
   ToeflDrill,
   UserProgress,
 } from './types/toefl';
+import {
+  encodeChallengeToken,
+  readChallengeFromLocation,
+} from './utils/challenge';
 import {
   createDefaultProgress,
   loadProgress,
@@ -30,6 +35,9 @@ import {
 export default function App() {
   const [lang, setLang] = useState<SupportedLang>(() => detectInitialLanguage());
   const [progress, setProgress] = useState<UserProgress>(() => loadProgress());
+  const [activeChallenge, setActiveChallenge] = useState<ChallengeConfig | null>(() =>
+    readChallengeFromLocation()
+  );
 
   const t = getTranslations(lang);
   const langMeta = getLangMeta(lang);
@@ -66,6 +74,24 @@ export default function App() {
       }
       const relativeTarget = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
       window.history.replaceState(null, '', relativeTarget);
+    }
+  }, []);
+
+  const handleActivateChallenge = useCallback((challenge: ChallengeConfig) => {
+    setActiveChallenge(challenge);
+    if (typeof window !== 'undefined') {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.set('c', encodeChallengeToken(challenge));
+      window.history.replaceState(null, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    }
+  }, []);
+
+  const handleExitChallenge = useCallback(() => {
+    setActiveChallenge(null);
+    if (typeof window !== 'undefined') {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete('c');
+      window.history.replaceState(null, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
     }
   }, []);
 
@@ -178,8 +204,12 @@ export default function App() {
 
         {/* Duolingo-Style TOEFL Trainer */}
         <TrainerWorkspace
+          lang={lang}
           t={t}
           progress={progress}
+          activeChallenge={activeChallenge}
+          onActivateChallenge={handleActivateChallenge}
+          onExitChallenge={handleExitChallenge}
           onRecordAnswer={handleRecordAnswer}
           onSaveRuleNote={handleSaveRuleNote}
         />

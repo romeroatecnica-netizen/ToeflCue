@@ -4,23 +4,48 @@ import {
   CalendarCheck,
   Check,
   CheckCircle2,
+  Copy,
   Flame,
   Lightbulb,
+  Play,
   RotateCw,
+  Scale,
+  Shuffle,
+  Swords,
   Target,
+  Trophy,
+  X,
   Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TOEFL_DRILLS } from '../data/toeflDrills';
 import type { TranslationBundle } from '../i18n/types';
-import type { DrillMode, ToeflDrill, ToeflSection, UserProgress } from '../types/toefl';
+import type {
+  ChallengeConfig,
+  ChallengeMode,
+  DrillMode,
+  SupportedLang,
+  ToeflDrill,
+  ToeflSection,
+  UserProgress,
+} from '../types/toefl';
+import {
+  buildChallengeUrl,
+  createFreshChallenge,
+  generateSeedCode,
+  getChallengeDeck,
+} from '../utils/challenge';
 import { computeOverallAccuracy } from '../utils/storage';
 import { ListeningPlayer } from './ListeningPlayer';
 import { SectionTimer } from './SectionTimer';
 
 interface TrainerWorkspaceProps {
+  lang: SupportedLang;
   t: TranslationBundle;
   progress: UserProgress;
+  activeChallenge: ChallengeConfig | null;
+  onActivateChallenge: (challenge: ChallengeConfig) => void;
+  onExitChallenge: () => void;
   onRecordAnswer: (drill: ToeflDrill, isCorrect: boolean, mode: DrillMode) => void;
   onSaveRuleNote: (drill: ToeflDrill) => void;
 }
@@ -74,13 +99,24 @@ function renderPassageWithHighlight(passage: string, term?: string) {
 }
 
 export function TrainerWorkspace({
+  lang,
   t,
   progress,
+  activeChallenge,
+  onActivateChallenge,
+  onExitChallenge,
   onRecordAnswer,
   onSaveRuleNote,
 }: TrainerWorkspaceProps) {
-  const [mode, setMode] = useState<DrillMode>('mixed');
-  const [deck, setDeck] = useState<ToeflDrill[]>(() => buildDeck('mixed', []));
+  const [soloShareSeed, setSoloShareSeed] = useState<string>(() => generateSeedCode());
+  const [mode, setMode] = useState<DrillMode>(() =>
+    activeChallenge ? activeChallenge.mode : 'mixed'
+  );
+  const [deck, setDeck] = useState<ToeflDrill[]>(() =>
+    activeChallenge
+      ? getChallengeDeck(activeChallenge)
+      : getChallengeDeck({ seed: soloShareSeed, mode: 'mixed', roundNumber: 1 })
+  );
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
   const [checked, setChecked] = useState(false);
@@ -92,9 +128,46 @@ export function TrainerWorkspace({
   const [savedNoteDrillId, setSavedNoteDrillId] = useState<string | null>(null);
   const [wasMistakeCleared, setWasMistakeCleared] = useState(false);
 
+  const [challengePanelOpen, setChallengePanelOpen] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftChallenge, setDraftChallenge] = useState<ChallengeConfig>(() =>
+    activeChallenge ?? {
+      seed: generateSeedCode(),
+      mode: 'mixed',
+      roundNumber: 1,
+    }
+  );
+  const [copiedChallenge, setCopiedChallenge] = useState(false);
+  const [copiedScoreLink, setCopiedScoreLink] = useState(false);
+
+  useEffect(() => {
+    if (!activeChallenge) return;
+    setMode(activeChallenge.mode);
+    setDeck(getChallengeDeck(activeChallenge));
+    setCurrentIdx(0);
+    setSelectedOpt(null);
+    setChecked(false);
+    setShowHint(false);
+    setRoundCorrect(0);
+    setRoundAnswered(0);
+    setRoundXp(0);
+    setRoundDone(false);
+    setSavedNoteDrillId(null);
+    setWasMistakeCleared(false);
+    setCopiedScoreLink(false);
+  }, [activeChallenge]);
+
   const startRound = useCallback(
     (nextMode: DrillMode, currentMistakes: string[]) => {
-      const nextDeck = buildDeck(nextMode, currentMistakes);
+      if (activeChallenge) {
+        onExitChallenge();
+      }
+      const nextSeed = generateSeedCode();
+      const nextDeck =
+        nextMode === 'mistakes'
+          ? buildDeck('mistakes', currentMistakes)
+          : getChallengeDeck({ seed: nextSeed, mode: nextMode, roundNumber: 1 });
+      setSoloShareSeed(nextSeed);
       setMode(nextMode);
       setDeck(nextDeck);
       setCurrentIdx(0);
@@ -107,8 +180,9 @@ export function TrainerWorkspace({
       setRoundDone(false);
       setSavedNoteDrillId(null);
       setWasMistakeCleared(false);
+      setCopiedScoreLink(false);
     },
-    []
+    [activeChallenge, onExitChallenge]
   );
 
   const currentDrill = deck[currentIdx] ?? null;
@@ -256,18 +330,212 @@ export function TrainerWorkspace({
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => startRound(mode, progress.mistakeIds)}
-          className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900 whitespace-nowrap shrink-0"
-        >
-          <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>{t.trainer.startNewRound}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setChallengePanelOpen((open) => !open)}
+            className={`inline-flex h-10 items-center gap-1.5 rounded-lg border px-3.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              challengePanelOpen || activeChallenge
+                ? 'border-blue-800 bg-blue-50 text-blue-900'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <Swords className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>
+              {challengePanelOpen ? t.challenge.closeBuilder : t.challenge.openBuilder}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (activeChallenge) {
+                const rotated = createFreshChallenge(
+                  activeChallenge.mode,
+                  activeChallenge,
+                  draftName || activeChallenge.challengerName
+                );
+                onActivateChallenge(rotated);
+              } else {
+                startRound(mode, progress.mistakeIds);
+              }
+            }}
+            className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-900 whitespace-nowrap shrink-0"
+          >
+            <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{t.trainer.startNewRound}</span>
+          </button>
+        </div>
       </div>
+
+      {/* Inline Challenge Builder Panel */}
+      {challengePanelOpen && (
+        <div className="rounded-xl border border-blue-200 bg-white p-5 sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">{t.challenge.builderTitle}</h2>
+              <p className="mt-1 max-w-2xl text-xs leading-relaxed text-slate-600">
+                {t.challenge.builderSubtitle}
+              </p>
+            </div>
+            <span className="font-mono text-xs font-semibold text-blue-800 tabular-nums">
+              #{draftChallenge.seed} · {t.challenge.roundTag} {draftChallenge.roundNumber}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr]">
+            <div>
+              <label htmlFor="challenge-name-input" className="block text-xs font-semibold text-slate-700">
+                {t.challenge.namePlaceholder}
+              </label>
+              <input
+                id="challenge-name-input"
+                type="text"
+                maxLength={24}
+                value={draftName}
+                onChange={(e) => setDraftName(e.target.value)}
+                placeholder={t.challenge.namePlaceholder}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-800 focus:bg-white focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="challenge-mode-select" className="block text-xs font-semibold text-slate-700">
+                {t.challenge.modeLabel}
+              </label>
+              <select
+                id="challenge-mode-select"
+                value={draftChallenge.mode}
+                onChange={(e) => {
+                  const nextMode = e.target.value as ChallengeMode;
+                  setDraftChallenge(createFreshChallenge(nextMode, null, draftName));
+                  setCopiedChallenge(false);
+                }}
+                className="mt-1 h-10 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-900 focus:border-blue-800 focus:bg-white focus:outline-none"
+              >
+                <option value="mixed">{t.sections.mixed}</option>
+                <option value="reading">{t.sections.reading}</option>
+                <option value="listening">{t.sections.listening}</option>
+                <option value="speaking">{t.sections.speaking}</option>
+                <option value="writing">{t.sections.writing}</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-600 truncate">
+            {buildChallengeUrl(
+              {
+                ...draftChallenge,
+                challengerName: draftName.trim() || undefined,
+              },
+              lang
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={async () => {
+                const url = buildChallengeUrl(
+                  {
+                    ...draftChallenge,
+                    challengerName: draftName.trim() || undefined,
+                  },
+                  lang
+                );
+                try {
+                  await navigator.clipboard.writeText(url);
+                  setCopiedChallenge(true);
+                  window.setTimeout(() => setCopiedChallenge(false), 2200);
+                } catch {
+                  setCopiedChallenge(true);
+                }
+              }}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-blue-800 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-900 whitespace-nowrap shrink-0"
+            >
+              {copiedChallenge ? (
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              <span>
+                {copiedChallenge ? t.challenge.copiedChallengeLink : t.challenge.copyChallengeLink}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDraftChallenge((prev) => createFreshChallenge(prev.mode, prev, draftName));
+                setCopiedChallenge(false);
+              }}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-50 whitespace-nowrap shrink-0"
+            >
+              <Shuffle className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t.challenge.generateFreshBtn}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onActivateChallenge({
+                  ...draftChallenge,
+                  challengerName: draftName.trim() || undefined,
+                });
+                setChallengePanelOpen(false);
+              }}
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 whitespace-nowrap shrink-0"
+            >
+              <Play className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t.challenge.playChallengeNow}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main Drill Card */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 sm:p-7">
+        {/* Active Challenge Duel Banner */}
+        {activeChallenge && (
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50/70 px-4 py-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold text-blue-900">
+                <Swords className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>{t.challenge.activeBannerTitle}</span>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono tabular-nums">
+                  #{activeChallenge.seed} · {t.challenge.roundTag} {activeChallenge.roundNumber}
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-700 tabular-nums">
+                {activeChallenge.targetCorrect !== undefined &&
+                activeChallenge.targetTotal !== undefined ? (
+                  <>
+                    <span className="font-semibold">{t.challenge.targetToBeat}: </span>
+                    {activeChallenge.targetCorrect}/{activeChallenge.targetTotal}
+                    {activeChallenge.targetXp !== undefined ? ` · ${activeChallenge.targetXp} XP` : ''}
+                    {activeChallenge.challengerName ? ` (${activeChallenge.challengerName})` : ''}
+                  </>
+                ) : (
+                  t.challenge.freshDuelNotice
+                )}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onExitChallenge();
+                startRound(mode === 'mistakes' ? 'mixed' : mode, progress.mistakeIds);
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-md border border-blue-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 whitespace-nowrap shrink-0"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{t.challenge.exitChallenge}</span>
+            </button>
+          </div>
+        )}
+
         {/* Empty Mistakes State */}
         {mode === 'mistakes' && deck.length === 0 && !roundDone && (
           <div className="py-10 text-center">
@@ -290,16 +558,60 @@ export function TrainerWorkspace({
         {roundDone && (
           <div className="py-6 text-center">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
-              <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
+              {activeChallenge && activeChallenge.targetCorrect !== undefined ? (
+                roundCorrect > activeChallenge.targetCorrect ||
+                (roundCorrect === activeChallenge.targetCorrect &&
+                  roundXp > (activeChallenge.targetXp ?? 0)) ? (
+                  <Trophy className="h-7 w-7 text-amber-600" aria-hidden="true" />
+                ) : roundCorrect === activeChallenge.targetCorrect &&
+                  roundXp === (activeChallenge.targetXp ?? 0) ? (
+                  <Scale className="h-7 w-7 text-blue-800" aria-hidden="true" />
+                ) : (
+                  <Target className="h-7 w-7 text-blue-800" aria-hidden="true" />
+                )
+              ) : (
+                <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
+              )}
             </div>
+
             <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
-              {t.trainer.roundCompleteTitle}
+              {activeChallenge && activeChallenge.targetCorrect !== undefined
+                ? roundCorrect > activeChallenge.targetCorrect ||
+                  (roundCorrect === activeChallenge.targetCorrect &&
+                    roundXp > (activeChallenge.targetXp ?? 0))
+                  ? t.challenge.resultWin
+                  : roundCorrect === activeChallenge.targetCorrect &&
+                      roundXp === (activeChallenge.targetXp ?? 0)
+                    ? t.challenge.resultTie
+                    : t.challenge.resultLoss
+                : t.trainer.roundCompleteTitle}
             </h2>
             <p className="mx-auto mt-1 max-w-lg text-sm text-slate-600">
               {t.trainer.roundCompleteSubtitle}
             </p>
 
-            <div className="mx-auto mt-6 grid max-w-md grid-cols-2 gap-3">
+            {/* Head-to-Head Duel Comparison when Challenger Score Exists */}
+            {activeChallenge && activeChallenge.targetCorrect !== undefined && (
+              <div className="mx-auto mt-5 grid max-w-md grid-cols-2 gap-3">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-4">
+                  <p className="text-xs font-semibold text-emerald-800">{t.challenge.yourScoreLabel}</p>
+                  <p className="mt-1 text-xl font-extrabold text-slate-900 tabular-nums">
+                    {roundCorrect}/{deck.length} · +{roundXp} XP
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold text-slate-600">
+                    {activeChallenge.challengerName || t.challenge.challengerScoreLabel}
+                  </p>
+                  <p className="mt-1 text-xl font-extrabold text-slate-900 tabular-nums">
+                    {activeChallenge.targetCorrect}/{activeChallenge.targetTotal ?? deck.length} · +
+                    {activeChallenge.targetXp ?? 0} XP
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="mx-auto mt-4 grid max-w-md grid-cols-2 gap-3">
               <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-medium text-slate-500">{t.trainer.earnedXp}</p>
                 <p className="mt-1 text-2xl font-extrabold text-amber-600 tabular-nums">
@@ -315,12 +627,58 @@ export function TrainerWorkspace({
             </div>
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {mode !== 'mistakes' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const shareConfig: ChallengeConfig = {
+                      seed: activeChallenge?.seed ?? soloShareSeed,
+                      mode: (activeChallenge?.mode ?? (mode === 'mixed' ? 'mixed' : mode)) as ChallengeMode,
+                      roundNumber: activeChallenge?.roundNumber ?? 1,
+                      challengerName: draftName.trim() || undefined,
+                      targetCorrect: roundCorrect,
+                      targetTotal: deck.length,
+                      targetXp: roundXp,
+                    };
+                    const url = buildChallengeUrl(shareConfig, lang);
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      setCopiedScoreLink(true);
+                      window.setTimeout(() => setCopiedScoreLink(false), 2400);
+                    } catch {
+                      setCopiedScoreLink(true);
+                    }
+                  }}
+                  className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-blue-800 px-5 text-sm font-semibold text-white transition-colors hover:bg-blue-900 whitespace-nowrap shrink-0"
+                >
+                  {copiedScoreLink ? (
+                    <Check className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <Copy className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  <span>
+                    {copiedScoreLink
+                      ? t.challenge.copiedChallengeLink
+                      : t.challenge.sendScoreBack}
+                  </span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => startRound(mode, progress.mistakeIds)}
-                className="inline-flex h-11 items-center rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 whitespace-nowrap shrink-0"
+                onClick={() => {
+                  const nextChallenge = createFreshChallenge(
+                    activeChallenge?.mode ?? (mode === 'mistakes' ? 'mixed' : (mode as ChallengeMode)),
+                    activeChallenge,
+                    draftName
+                  );
+                  setDraftChallenge(nextChallenge);
+                  onActivateChallenge(nextChallenge);
+                }}
+                className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 whitespace-nowrap shrink-0"
               >
-                {t.trainer.playAgain}
+                <Shuffle className="h-4 w-4" aria-hidden="true" />
+                <span>{t.challenge.nextRotatingChallenge}</span>
               </button>
 
               {progress.mistakeIds.length > 0 && mode !== 'mistakes' && (

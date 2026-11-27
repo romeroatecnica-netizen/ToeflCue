@@ -157,4 +157,28 @@ export interface TranslationBundle {
     copyright: string;
     canonicalNote: string;
   };
+  challenge: {
+    openBuilder: string;
+    closeBuilder: string;
+    builderTitle: string;
+    builderSubtitle: string;
+    namePlaceholder: string;
+    modeLabel: string;
+    generateFreshBtn: string;
+    copyChallengeLink: string;
+    copiedChallengeLink: string;
+    playChallengeNow: string;
+    activeBannerTitle: string;
+    targetToBeat: string;
+    freshDuelNotice: string;
+    roundTag: string;
+    exitChallenge: string;
+    nextRotatingChallenge: string;
+    sendScoreBack: string;
+    resultWin: string;
+    resultTie: string;
+    resultLoss: string;
+    yourScoreLabel: string;
+    challengerScoreLabel: string;
+  };
 }
