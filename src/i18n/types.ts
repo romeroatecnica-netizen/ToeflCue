@@ -132,12 +132,14 @@ export interface TranslationBundle {
     heading: string;
     subtitle: string;
     disclosure: string;
+    pricePrefix: string;
     cta: string;
     items: Array<{
+      id: 'headphones' | 'ereader' | 'stand' | 'powerbank';
       title: string;
       category: string;
       description: string;
-      url: string;
+      query: string;
     }>;
   };
   editorial: {

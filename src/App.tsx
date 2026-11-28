@@ -217,6 +217,9 @@ export default function App() {
         {/* Static SVG Mastery Visualization */}
         <SectionMasterySvg progress={progress} t={t} />
 
+        {/* Optimal High-Visibility Amazon.es Affiliate Product Shelf */}
+        <AffiliateGearSection t={t} />
+
         {/* JSON Backup, Study Notes & Print */}
         <DataAndNotesPanel
           lang={lang}
@@ -230,9 +233,6 @@ export default function App() {
 
         {/* Media.net Ad Slot (Between Trainer/Chart and Editorial Guide) */}
         <AdSlot slotId="medianet-toeflcue-mid" placement="top" t={t} />
-
-        {/* Contextual Study Gear / Affiliate Block */}
-        <AffiliateGearSection t={t} />
 
         {/* SEO Editorial Guide, Connectors & Interactive FAQ */}
         <EditorialSeoSection t={t} />
